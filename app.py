@@ -38,7 +38,7 @@ def get_token():
 
             # Check if the "delete" key exists
             if "delete" in token_data:
-                token = token_data["delete"]
+                token = token_data["dashboard"]
 
                 # Remove the first 5 and last 6 characters
                 processed_token = token[5:-6]
