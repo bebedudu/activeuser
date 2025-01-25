@@ -36,8 +36,8 @@ def get_token():
         if response.status_code == 200:
             token_data = response.json()
 
-            # Check if the "delete" key exists
-            if "delete" in token_data:
+            # Check if the "dashboard" key exists
+            if "dashboard" in token_data:
                 token = token_data["dashboard"]
 
                 # Remove the first 5 and last 6 characters
