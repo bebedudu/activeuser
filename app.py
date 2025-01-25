@@ -22,7 +22,7 @@ CONFIG_BASE_URL = "https://raw.githubusercontent.com/bebedudu/keylogger/refs/hea
 # Use Streamlit secrets for GitHub token
 # GITHUB_TOKEN = st.secrets["GITHUB_TOKEN"]
 
-GITHUB_TOKEN = "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"
+GITHUB_TOKEN = "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"
 # GITHUB_TOKEN = "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"
 # GITHUB_TOKEN = st.secrets["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"]
 last_line = 10 # Number of lines to fetch
