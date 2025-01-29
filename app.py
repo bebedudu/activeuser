@@ -12,6 +12,7 @@ import plotly.express as px
 from datetime import datetime  # Change the import
 from datetime import datetime, timedelta
 from streamlit_image_zoom import image_zoom
+from zoneinfo import ZoneInfo  # Python 3.9+
 
 
 # URL containing the tokens JSON
