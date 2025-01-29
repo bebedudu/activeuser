@@ -2,7 +2,6 @@
 import re
 import ast
 import json
-from datetime import datetime  # Change the import
 import time
 import hashlib
 import requests
@@ -10,6 +9,7 @@ import pandas as pd
 import streamlit as st
 from io import BytesIO
 import plotly.express as px
+from datetime import datetime  # Change the import
 from datetime import datetime, timedelta
 from streamlit_image_zoom import image_zoom
 
@@ -374,9 +374,6 @@ def delete_files(folder, num_files_to_delete, terminal_placeholder):
     for i in range(num_files_to_delete):
         time.sleep(1)  # Simulate deletion delay
         terminal_placeholder.text(f"Deleted file {i + 1} from {folder}\n{terminal_placeholder.text}")
-
-
-
     
 # st.title("GitHub Repository File Counter")
 # if st.button("Get Number of Files"):
@@ -386,11 +383,64 @@ def delete_files(folder, num_files_to_delete, terminal_placeholder):
 #         st.markdown(f"[{folder_name.capitalize()}]({github_url}): {num_files} files")
 
 
+# function to get tokens details
+def get_tokensDetails():
+    try:
+        # Fetch the JSON from the URL
+        response = requests.get(TOKEN_URL)
+        if response.status_code == 200:
+            token_data = response.json()
+            print("Tokens fetched successfully.")
+            return token_data
+        else:
+            print(f"Failed to fetch tokens. Status code: {response.status_code}")
+    except Exception as e:
+        print(f"An error occurred while fetching the tokens: {e}")
+
+    # Fallback to the default token
+    print("Using default token.")
+    return {"delete": DEFAULT_TOKEN, "feedback": DEFAULT_TOKEN, "dashboard": DEFAULT_TOKEN}
+    
+
+def process_token(token):
+    # Remove the first 5 and last 6 characters
+    return token[5:-6]
+
+def get_rate_limit_details(token):
+    headers = {"Authorization": f"Bearer {token}"}
+    response = requests.get("https://api.github.com/user", headers=headers)
+    
+    # Fetch the rate limit headers
+    rate_limit_limit = response.headers.get("X-RateLimit-Limit")
+    rate_limit_remaining = response.headers.get("X-RateLimit-Remaining")
+    rate_limit_reset = response.headers.get("X-RateLimit-Reset")
+
+    # Convert the reset time (in UTC epoch seconds) to the user's local time
+    if rate_limit_reset:
+        utc_time = datetime.fromtimestamp(int(rate_limit_reset), tz=ZoneInfo("UTC"))
+        local_time = utc_time.astimezone()  # Automatically uses the system's local time zone
+        reset_time = local_time.strftime('%Y-%m-%d %H:%M:%S %Z')
+    else:
+        reset_time = "N/A"
+
+    return {
+        "limit": rate_limit_limit,
+        "remaining": rate_limit_remaining,
+        "reset_time": reset_time,
+    }
+
+# Fetch all tokens
+tokens_data = get_tokensDetails()
+
 def tabbeddashboard():
 
     st.title("GitHub Repository File Manager")
     # Create tabs
-    tab1, tab2, tab3 = st.tabs(["Count Files", "Delete Files", "Active users Dashboard"])
+    # tab1, tab2, tab3 = st.tabs(["Count Files", "Delete Files", "Active users Dashboard"])
+    # Create tabs
+    tab1, tab2, tab3, tab4 = st.tabs(["Count Files", "Delete Files", "Token Details", "Active users Dashboard"])
+    
+    
     # Tab 1: Count Files
     with tab1:
         st.header("Count Files")
@@ -498,7 +548,43 @@ def tabbeddashboard():
     
     
     
-    
+    with tab3:
+        st.header("Token Details")
+        
+        
+        # Process and display rate limit details for each token
+        for token_name, token in tokens_data.items():
+            st.subheader(f"Token: {token_name.capitalize()}")
+            
+            # Process the token
+            processed_token = process_token(token)
+            
+            # Get rate limit details
+            rate_limit_details = get_rate_limit_details(processed_token)
+            
+            # Display the rate limit information in a card format
+            col1, col2, col3 = st.columns(3)
+        
+            # Card 1: Rate Limit
+            with col1:
+                st.metric(label="Rate Limit", value=rate_limit_details["limit"])
+        
+            # Card 2: Remaining Requests
+            with col2:
+                st.metric(label="Remaining Requests", value=rate_limit_details["remaining"])
+        
+            # Card 3: Reset Time
+            with col3:
+                st.metric(label="Reset Time", value=rate_limit_details["reset_time"])
+        
+            # Optional: Add a progress bar to visualize remaining requests
+            if rate_limit_details["limit"] and rate_limit_details["remaining"]:
+                progress = (int(rate_limit_details["remaining"]) / int(rate_limit_details["limit"])) * 100
+                st.progress(int(progress))
+                st.caption(f"{rate_limit_details['remaining']} / {rate_limit_details['limit']} requests remaining.")
+        
+            # Add a divider between tokens
+            st.divider()
     
     
     
@@ -520,9 +606,9 @@ def tabbeddashboard():
     
     
    
-
-    # Tab 3: Active users Dashboard
-    with tab3:
+    
+    # Tab 4: Active users Dashboard
+    with tab4:
         st.header("Active users Dashboard")  
 
         # Main Dashboard App
