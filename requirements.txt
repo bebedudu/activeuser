@@ -3,4 +3,4 @@ pandas
 streamlit
 plotly
 streamlit-image-zoom
-zoneinfo; python_version >= '3.9'
+zoneinfo
